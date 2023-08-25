@@ -155,6 +155,11 @@ where
                             Box::new(CsvSink::new(path, options.clone(), input_schema.as_ref())?)
                                 as Box<dyn SinkTrait>
                         },
+                        #[cfg(feature = "json")]
+                        FileType::Json(options) => {
+                            Box::new(JsonSink::new(path, *options, input_schema.as_ref())?)
+                                as Box<dyn SinkTrait>
+                        },
                         #[allow(unreachable_patterns)]
                         _ => unreachable!(),
                     }

@@ -234,3 +234,4 @@ def test_scan_csv_schema_overwrite_not_projected_8483(foods_file_path: Path) -> 
     )
     expected = pl.DataFrame({"count": 27}, schema={"count": pl.UInt32})
     assert_frame_equal(df, expected)
+    print(df)
