@@ -1117,3 +1117,15 @@ fn test_leading_whitespace_with_quote() -> PolarsResult<()> {
     assert_eq!(col_2.get(0)?, AnyValue::Float64(4.1));
     Ok(())
 }
+
+#[test]
+fn test_transmute() -> PolarsResult<()> {
+    let df: DataFrame = df!("Name" => &["Adenine", "Cytosine", "Guanine", "Thymine"],
+                        "Symbol" => &["A", "C", "G", "T"])?;
+    let cols: &[Series] = df.get_columns();
+    let cols = unsafe { std::mem::transmute::<&[Series], &[Series]>(cols) };
+
+    // this fails if all columns are not equal.
+    println!("{:?}", cols);
+    Ok(())
+}

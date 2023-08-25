@@ -4,6 +4,8 @@ use std::thread::JoinHandle;
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use polars_core::prelude::*;
+#[cfg(feature = "csv")]
+use polars_io::csv::{CsvWriter, DEFAULT_CSV_BATCH_SIZE};
 #[cfg(feature = "parquet")]
 use polars_io::parquet::ParquetWriter;
 #[cfg(feature = "ipc")]
@@ -15,7 +17,7 @@ use polars_plan::prelude::*;
 use crate::operators::{DataChunk, FinalizedSink, PExecutionContext, Sink, SinkResult};
 use crate::pipeline::morsels_per_sink;
 
-#[cfg(any(feature = "parquet", feature = "ipc"))]
+#[cfg(any(feature = "parquet", feature = "ipc", feature = "csv"))]
 trait SinkWriter {
     fn _write_batch(&mut self, df: &DataFrame) -> PolarsResult<()>;
     fn _finish(&mut self) -> PolarsResult<()>;
@@ -35,6 +37,18 @@ impl SinkWriter for polars_io::parquet::BatchedWriter<std::fs::File> {
 
 #[cfg(feature = "ipc")]
 impl SinkWriter for polars_io::ipc::BatchedWriter<std::fs::File> {
+    fn _write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
+        self.write_batch(df)
+    }
+
+    fn _finish(&mut self) -> PolarsResult<()> {
+        self.finish()?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "csv")]
+impl SinkWriter for polars_io::csv::BatchedWriter<std::fs::File> {
     fn _write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
         self.write_batch(df)
     }
@@ -107,6 +121,48 @@ impl IpcSink {
             receiver,
             writer,
             options.maintain_order,
+            morsels_per_sink,
+        )));
+
+        Ok(FilesSink {
+            sender,
+            io_thread_handle,
+        })
+    }
+}
+
+#[cfg(feature = "csv")]
+pub struct CsvSink {}
+#[cfg(feature = "csv")]
+impl CsvSink {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(path: &Path, options: &CsvWriteOptions, schema: &Schema) -> PolarsResult<FilesSink> {
+        let file = std::fs::File::create(path)?;
+
+        let writer = CsvWriter::new(file)
+            .has_header(options.header)
+            .with_delimiter(options.delimiter)
+            .with_date_format(options.date_format.clone())
+            .with_datetime_format(options.datetime_format.clone())
+            .with_float_precision(options.float_precision)
+            .with_line_terminator(options.line_terminator.clone())
+            .with_null_value(options.null.clone())
+            .with_quote_style(options.quote_style)
+            .with_quoting_char(options.quote)
+            .with_time_format(options.time_format.clone())
+            .with_batch_size(options.batch_size.unwrap_or(DEFAULT_CSV_BATCH_SIZE))
+            .batched(schema)?;
+
+        let writer = Box::new(writer) as Box<dyn SinkWriter + Send + Sync>;
+
+        let morsels_per_sink = morsels_per_sink();
+        let backpressure = morsels_per_sink * 2;
+        let (sender, receiver) = bounded(backpressure);
+
+        let io_thread_handle = Arc::new(Some(init_writer_thread(
+            receiver,
+            writer,
+            false,
             morsels_per_sink,
         )));
 

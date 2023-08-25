@@ -62,7 +62,7 @@ use rayon::prelude::*;
 pub use read::{CsvEncoding, CsvReader, NullValues};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-pub use write::{CsvWriter, QuoteStyle};
+pub use write::{BatchedWriter, CsvWriter, QuoteStyle, DEFAULT_CSV_BATCH_SIZE};
 
 use crate::csv::read_impl::CoreReader;
 use crate::csv::utils::get_reader_bytes;

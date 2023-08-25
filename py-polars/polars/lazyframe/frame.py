@@ -86,6 +86,7 @@ if TYPE_CHECKING:
         ClosedInterval,
         ColumnNameOrSelector,
         CsvEncoding,
+        CsvQuoteStyle,
         FillNullStrategy,
         FrameInitTypes,
         IntoExpr,
@@ -1969,6 +1970,130 @@ naive plan: (run LazyFrame.explain(optimized=True) to see the optimized plan)
             path=path,
             compression=compression,
             maintain_order=maintain_order,
+        )
+
+    def sink_csv(
+        self,
+        path: str | Path,
+        *,
+        header: bool = True,
+        date_format: str | None = None,
+        time_format: str | None = None,
+        datetime_format: str | None = None,
+        float_precision: str | None = None,
+        delimiter: str = ",",
+        quote: str = '"',
+        null: str = "",
+        line_terminator: str = "\n",
+        quote_style: CsvQuoteStyle = "necessary",
+        batch_size: int | None = None,
+        type_coercion: bool = True,
+        predicate_pushdown: bool = True,
+        projection_pushdown: bool = True,
+        simplify_expression: bool = True,
+        no_optimization: bool = False,
+        slice_pushdown: bool = True,
+    ) -> DataFrame:
+        """
+        Persists a LazyFrame at the provided path.
+
+        This allows streaming results that are larger than RAM to be written to disk.
+
+        Notes
+        -----
+        `sort` is not supported in streaming mode
+
+        Parameters
+        ----------
+        path
+            File path to which the file should be written.
+        header
+            Set whether to write headers.
+        date_format
+            Set the CSV file's date format.
+        time_format
+            Set the CSV file's time format.
+        datetime_format
+            Set the CSV file's datetime format.
+        float_precision
+            Set the CSV file's float precision.
+        delimiter
+            Set the CSV file's column delimiter as a byte character.
+        quote
+            Set the single byte character used for quoting.
+        null
+            Set the CSV file's null value representation.
+        line_terminator
+            Set the CSV file's line terminator.
+        quote_style: {'always', 'necessary', 'non_numeric'}
+            Set the CSV file's quoting behavior.
+
+            Choose "always" for quoting around every filed always.
+
+            Choose "necessary" for quoting fields only when necessary.
+                They are necessary when fields contain a quote, delimiter
+                 or record terminator.
+                Quotes are also necessary when writing an empty record
+                (which is indistinguishable from a record with one empty field).
+
+            Choose "non_numeric" for adding quotes around all fields that are
+                non-numeric.
+                Namely, when writing a field that does not parse as a valid float
+                or integer, then quotes will be used even if they aren`t strictly
+                necessary.
+        batch_size
+            Set the batch row size to use while writing the CSV.
+        type_coercion
+            Do type coercion optimization.
+        predicate_pushdown
+            Do predicate pushdown optimization.
+        projection_pushdown
+            Do projection pushdown optimization.
+        simplify_expression
+            Run simplify expressions optimization.
+        no_optimization
+            Turn off (certain) optimizations.
+        slice_pushdown
+            Slice pushdown optimization.
+
+        Returns
+        -------
+        DataFrame
+
+        Examples
+        --------
+        >>> lf = pl.scan_csv("/path/to/my_larger_than_ram_file.csv")  # doctest: +SKIP
+        >>> lf.sink_csv("out.csv")  # doctest: +SKIP
+
+        """
+        if no_optimization:
+            predicate_pushdown = False
+            projection_pushdown = False
+            slice_pushdown = False
+
+        lf = self._ldf.optimization_toggle(
+            type_coercion,
+            predicate_pushdown,
+            projection_pushdown,
+            simplify_expression,
+            slice_pushdown,
+            comm_subplan_elim=False,
+            comm_subexpr_elim=False,
+            streaming=True,
+        )
+        return lf.sink_csv(
+            path=path,
+            header=header,
+            date_format=date_format,
+            time_format=time_format,
+            datetime_format=datetime_format,
+            float_precision=float_precision,
+            delimiter=ord(delimiter),
+            quote=ord(quote),
+            null=null,
+            line_terminator=line_terminator,
+            quote_style=quote_style,
+            batch_size=batch_size,
         )
 
     @deprecate_renamed_parameter(

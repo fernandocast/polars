@@ -234,3 +234,21 @@ def test_scan_csv_schema_overwrite_not_projected_8483(foods_file_path: Path) -> 
     )
     expected = pl.DataFrame({"count": 27}, schema={"count": pl.UInt32})
     assert_frame_equal(df, expected)
+
+
+def test_sink_csv_should_write_same_data(foods_file_path: Path, tmp_path: Path) -> None:
+    tmp_path.mkdir(exist_ok=True)
+    file_path = tmp_path / "sink_csv_test_utf8.csv"
+
+    expected = pl.read_csv(
+        foods_file_path,
+        dtypes={"calories": pl.Utf8, "sugars_g": pl.Utf8},
+    )
+
+    lz_df = pl.scan_csv(
+        foods_file_path, dtypes={"calories": pl.Utf8, "sugars_g": pl.Utf8}
+    )
+
+    lz_df.sink_csv(file_path)
+    df = pl.read_csv(file_path, dtypes={"calories": pl.Utf8, "sugars_g": pl.Utf8})
+    assert_frame_equal(df, expected)

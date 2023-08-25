@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use polars_core::prelude::*;
 #[cfg(feature = "csv")]
-use polars_io::csv::{CsvEncoding, NullValues};
+use polars_io::csv::{CsvEncoding, NullValues, QuoteStyle};
 #[cfg(feature = "ipc")]
 use polars_io::ipc::IpcCompression;
 #[cfg(feature = "parquet")]
@@ -71,6 +71,33 @@ pub struct IpcWriterOptions {
     pub compression: Option<IpcCompression>,
     /// maintain the order the data was processed
     pub maintain_order: bool,
+}
+
+#[cfg(feature = "csv")]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct CsvWriteOptions {
+    pub header: bool,
+    /// Used for [`DataType::Date`].
+    pub date_format: Option<String>,
+    /// Used for [`DataType::Time`].
+    pub time_format: Option<String>,
+    /// Used for [`DataType::Datetime`].
+    pub datetime_format: Option<String>,
+    /// Used for [`DataType::Float64`] and [`DataType::Float32`].
+    pub float_precision: Option<usize>,
+    /// Used as separator/delimiter.
+    pub delimiter: u8,
+    /// Quoting character.
+    pub quote: u8,
+    /// Null value representation.
+    pub null: String,
+    /// String appended after every row.
+    pub line_terminator: String,
+    /// Used for quoting behavior.
+    pub quote_style: QuoteStyle,
+    /// Used to define row batch size when writing the file.
+    pub batch_size: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -303,6 +330,8 @@ pub enum FileType {
     Parquet(ParquetWriteOptions),
     #[cfg(feature = "ipc")]
     Ipc(IpcWriterOptions),
+    #[cfg(feature = "csv")]
+    Csv(CsvWriteOptions),
     Memory,
 }
 

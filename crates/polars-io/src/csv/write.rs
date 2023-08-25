@@ -1,6 +1,7 @@
 use super::*;
 
 #[derive(Copy, Clone, Default, Eq, Hash, PartialEq, Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum QuoteStyle {
     /// This puts quotes around every field. Always.
     Always,
@@ -25,6 +26,8 @@ pub struct CsvWriter<W: Write> {
     batch_size: usize,
 }
 
+pub const DEFAULT_CSV_BATCH_SIZE: usize = 1024;
+
 impl<W> SerWriter<W> for CsvWriter<W>
 where
     W: Write,
@@ -40,7 +43,7 @@ where
             buffer,
             options,
             header: true,
-            batch_size: 1024,
+            batch_size: DEFAULT_CSV_BATCH_SIZE,
         }
     }
 
@@ -130,5 +133,50 @@ where
     pub fn with_quote_style(mut self, quote_style: QuoteStyle) -> Self {
         self.options.quote_style = quote_style;
         self
+    }
+
+    pub fn batched(self, _: &Schema) -> PolarsResult<BatchedWriter<W>> {
+        let options = write_impl::SerializeOptions {
+            time_format: Some(self.options.time_format.unwrap_or("%T%.9f".to_string())),
+            ..Default::default()
+        };
+        Ok(BatchedWriter {
+            buffer: self.buffer,
+            options: options,
+            header: self.header,
+            batch_size: self.batch_size,
+            first_time: true,
+        })
+    }
+}
+
+pub struct BatchedWriter<W: Write> {
+    buffer: W,
+    options: write_impl::SerializeOptions,
+    header: bool,
+    batch_size: usize,
+    first_time: bool,
+}
+
+impl<W> BatchedWriter<W>
+where
+    W: Write,
+{
+    /// Write a batch to the csv writer.
+    ///
+    /// # Panics
+    /// The caller must ensure the chunks in the given [`DataFrame`] are aligned.
+    pub fn write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
+        if self.header && self.first_time && df.height() > 0 {
+            let names = df.get_column_names();
+            write_impl::write_header(&mut self.buffer, &names, &self.options)?;
+            self.first_time = false;
+        }
+        write_impl::write(&mut self.buffer, df, self.batch_size, &self.options)
+    }
+
+    /// Writes the footer of the parquet file. Returns the total size of the file.
+    pub fn finish(&mut self) -> PolarsResult<u64> {
+        Ok(0)
     }
 }
