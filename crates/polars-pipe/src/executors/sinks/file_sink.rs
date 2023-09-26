@@ -6,7 +6,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use polars_core::prelude::*;
 use polars_io::csv::CsvWriter;
 #[cfg(feature = "json")]
-use polars_io::json::{BatchedWriter, JsonBatchedWriter, JsonFormat, JsonLinesBatchedWriter};
+use polars_io::json::JsonBatchedWriter;
 #[cfg(feature = "parquet")]
 use polars_io::parquet::ParquetWriter;
 #[cfg(feature = "ipc")]
@@ -60,30 +60,6 @@ impl SinkWriter for polars_io::csv::BatchedWriter<std::fs::File> {
     }
 
     fn _finish(&mut self) -> PolarsResult<()> {
-        Ok(())
-    }
-}
-
-#[cfg(feature = "json")]
-impl SinkWriter for JsonBatchedWriter<std::fs::File> {
-    fn _write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
-        self.write_batch(df)
-    }
-
-    fn _finish(&mut self) -> PolarsResult<()> {
-        self.finish()?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "json")]
-impl SinkWriter for JsonLinesBatchedWriter<std::fs::File> {
-    fn _write_batch(&mut self, df: &DataFrame) -> PolarsResult<()> {
-        self.write_batch(df)
-    }
-
-    fn _finish(&mut self) -> PolarsResult<()> {
-        self.finish()?;
         Ok(())
     }
 }
@@ -254,14 +230,7 @@ impl JsonSink {
         _schema: &Schema,
     ) -> PolarsResult<FilesSink> {
         let file = std::fs::File::create(path)?;
-        let writer = match options.json_format {
-            JsonFormat::Json => {
-                Box::new(JsonBatchedWriter::new(file)) as Box<dyn SinkWriter + Send + Sync>
-            },
-            JsonFormat::JsonLines => {
-                Box::new(JsonLinesBatchedWriter::new(file)) as Box<dyn SinkWriter + Send + Sync>
-            },
-        };
+        let writer = Box::new(JsonBatchedWriter::new(file, options.json_format)) as Box<dyn SinkWriter + Send + Sync>;
         let morsels_per_sink = morsels_per_sink();
         let backpressure = morsels_per_sink * 2;
         let (sender, receiver) = bounded(backpressure);
